@@ -4,8 +4,18 @@ title: Postal Codes and Addresses
 
 # Postal Codes and Addresses
 
-Stickler compares postal codes **exactly**. `"98101-1234"` does not match
-`"98101 1234"`, and `"98101"` does not match `"98101-1234"`.
+On the **inference** paths — [`stickler.evaluate`](../../Getting-Started/ultra-quick-start.md), `eval_for`, `StructuredModel.from_pydantic`, and `StructuredModel.from_json_schema` when [inference is turned on](../../Getting-Started/choosing-a-configuration-path.md) for that field (root `x-aws-stickler-infer-unspecified`, or `"comparator": "auto"` on the property) — a `str` field whose name tokens match the postal rule (`zip`, `postal`, or `postcode` as whole words, so e.g. `zip`, `zip_code`, `postal_code`, `postcode`, and `postal`, but not `zipcode`) is compared with `ExactComparator` at threshold `1.0`, so `"98101-1234"` does not match `"98101 1234"`, and `"98101"` does not match `"98101-1234"`.
+
+On a hand-authored [`StructuredModel`](README.md) field without an explicit
+comparator (a bare `str` annotation or `ComparableField()` with no
+`comparator=`), or on JSON Schema properties that still use the non-inferred
+defaults (typically a bare `"type": "string"` with no Stickler extensions), a
+string field uses
+[`LevenshteinComparator`](README.md#levenshteincomparator) instead. Then
+`"98101-1234"` vs `"98102-1234"` (a different code) can score `0.9`, the same as
+reformatting the same code, so there is no threshold that accepts one and
+rejects the other. Name a country-specific comparator when you need reliable
+postal behaviour on those paths.
 
 That is deliberate, and it is probably not what you want for your data. This
 page explains why the library refuses to guess, and how to get the behaviour
@@ -62,6 +72,8 @@ class USZipComparator(BaseComparator):
     collapsing them hides a real difference in what was extracted.
     """
 
+    DEFAULT_THRESHOLD = 1.0
+
     def _compare(self, gt, pred) -> float:
         return 1.0 if self._canonical(gt) == self._canonical(pred) else 0.0
 
@@ -79,6 +91,8 @@ class UKPostcodeComparator(BaseComparator):
     and inward parts are re-joined canonically rather than concatenated, so
     the structural split survives.
     """
+
+    DEFAULT_THRESHOLD = 1.0
 
     def _compare(self, gt, pred) -> float:
         return 1.0 if self._canonical(gt) == self._canonical(pred) else 0.0
